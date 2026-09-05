@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import EntryForms from "@/components/EntryForms";
 import SetupNotice from "@/components/SetupNotice";
-import { hasDatabase } from "@/lib/db";
+import { describeDbError, hasDatabase } from "@/lib/db";
 import { listPlayers } from "@/lib/rules";
 import { currentPlayer } from "@/lib/session";
 
@@ -10,10 +10,16 @@ export const dynamic = "force-dynamic";
 export default async function EntryPage() {
   if (!hasDatabase()) return <SetupNotice />;
 
-  const viewer = await currentPlayer();
-  if (viewer) redirect("/board");
-
-  const players = await listPlayers();
+  let players;
+  try {
+    const viewer = await currentPlayer();
+    if (viewer) redirect("/board");
+    players = await listPlayers();
+  } catch (err) {
+    // redirect() throws by design — let it through.
+    if (err && typeof err === "object" && "digest" in err) throw err;
+    return <SetupNotice error={describeDbError(err)} />;
+  }
 
   return (
     <>
