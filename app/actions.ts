@@ -203,3 +203,35 @@ export async function setRevealAction(formData: FormData) {
   revalidatePath("/me");
   revalidatePath("/board");
 }
+
+/**
+ * Wipes the game so the same deployment can be reused — after a test run, or
+ * next year. Gated on RESET_PASSCODE: with no passcode configured there is no
+ * way to trigger it, since anyone with the link can reach this page.
+ */
+export async function resetAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const passcode = String(formData.get("passcode") ?? "").trim();
+  const scope = String(formData.get("scope") ?? "");
+  const expected = process.env.RESET_PASSCODE;
+
+  if (!expected) {
+    return { error: "No RESET_PASSCODE is set on this deployment, so resetting is disabled." };
+  }
+  if (passcode !== expected) {
+    return { error: "That reset passcode isn't right." };
+  }
+
+  if (scope === "everything") {
+    await sql("delete from rules");
+    await sql("delete from players");
+    await clearSession();
+  } else if (scope === "rules") {
+    await sql("delete from rules");
+    await sql("update players set revealed_at = null");
+  } else {
+    return { error: "Pick what to clear." };
+  }
+
+  revalidatePath("/", "layout");
+  return { ok: Date.now() };
+}

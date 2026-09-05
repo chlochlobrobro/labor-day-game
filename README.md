@@ -37,6 +37,7 @@ URL; each person taps **Add me** to claim their name and PIN.
 | --- | --- |
 | `POSTGRES_URL` | Postgres connection string. `DATABASE_URL` also works, so Supabase/Neon/Railway are fine. **Required.** |
 | `GROUP_PASSCODE` | If set, a new person must type this passcode to join. Stops a stray link-forward from adding a stranger. |
+| `RESET_PASSCODE` | Enables the `/reset` page and is the passcode it asks for. Unset means resetting is disabled. |
 | `APP_SECRET` | Signs the login cookie. Defaults to a value derived from the database URL, which is fine for one weekend. |
 
 ### A note on TLS
@@ -80,13 +81,21 @@ can read everything, and nothing stops someone from reading over your shoulder.
 
 ## Resetting between years
 
+Set a `RESET_PASSCODE` environment variable and visit `/reset`. It offers two
+options, both asking for that passcode:
+
+- **Clear the rules, keep everyone** — wipes every rule and re-locks anyone who
+  had revealed theirs, so the same group can run the round again. Useful for
+  clearing a test run before the real thing.
+- **Delete everything** — drops names and PINs too; everyone re-joins from
+  scratch.
+
+Without `RESET_PASSCODE` set, the page shows how to enable it and the buttons do
+nothing — anyone with the link can reach `/reset`, so an unguarded reset button
+would be a loaded gun.
+
+Straight SQL works too:
+
 ```sql
 truncate rules, players cascade;
-```
-
-Or drop just the rules and keep the roster:
-
-```sql
-truncate rules;
-update players set revealed_at = null;
 ```
