@@ -17,6 +17,37 @@ export function hasDatabase() {
   return connectionString.length > 0;
 }
 
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", ""]);
+
+/**
+ * `pg` lets an `sslmode` in the connection string override the `ssl` option
+ * passed alongside it, so a hosted URL ending in `?sslmode=verify-full` turns
+ * on certificate verification no matter what we ask for — and managed Postgres
+ * (Vercel, Neon, Supabase) presents a chain Node won't verify, failing with
+ * SELF_SIGNED_CERT_IN_CHAIN. Strip the parameter and state the TLS policy
+ * ourselves: encrypted, but not verified against a CA.
+ */
+function connectionConfig(): { url: string; ssl: false | { rejectUnauthorized: boolean } } {
+  let url = connectionString;
+  let disabled = false;
+  let local = connectionString.includes("localhost");
+
+  try {
+    const parsed = new URL(connectionString);
+    local = LOCAL_HOSTS.has(parsed.hostname);
+    disabled = parsed.searchParams.get("sslmode") === "disable";
+    if (parsed.searchParams.has("sslmode") || parsed.searchParams.has("ssl")) {
+      parsed.searchParams.delete("sslmode");
+      parsed.searchParams.delete("ssl");
+      url = parsed.toString();
+    }
+  } catch {
+    // Not a URL we can parse (a key/value DSN, say) — hand it over untouched.
+  }
+
+  return { url, ssl: disabled || local ? false : { rejectUnauthorized: false } };
+}
+
 export function getPool(): Pool {
   if (!connectionString) {
     throw new Error(
@@ -24,15 +55,18 @@ export function getPool(): Pool {
     );
   }
   if (!global.__ldgPool) {
+    const { url, ssl } = connectionConfig();
     global.__ldgPool = new Pool({
-      connectionString,
+      connectionString: url,
+      ssl,
       max: 3,
       idleTimeoutMillis: 10_000,
       // Fail fast with a readable error instead of hanging until the
       // serverless function times out.
       connectionTimeoutMillis: 8_000,
-      ssl: connectionString.includes("localhost") ? undefined : { rejectUnauthorized: false },
     });
+    // A dropped backend must not take the whole function down.
+    global.__ldgPool.on("error", (err) => console.error("postgres pool error", err));
   }
   return global.__ldgPool;
 }

@@ -39,6 +39,16 @@ URL; each person taps **Add me** to claim their name and PIN.
 | `GROUP_PASSCODE` | If set, a new person must type this passcode to join. Stops a stray link-forward from adding a stranger. |
 | `APP_SECRET` | Signs the login cookie. Defaults to a value derived from the database URL, which is fine for one weekend. |
 
+### A note on TLS
+
+Managed Postgres (Vercel, Neon, Supabase) hands out connection strings ending in
+`?sslmode=require` or `verify-full`, and presents a certificate chain Node
+doesn't trust out of the box. The app strips that parameter and connects with
+TLS enabled but certificate verification off — the traffic is encrypted, the
+server's identity isn't checked against a CA. Fine for a party game on a
+provider-internal network; if you want it verified, supply the provider's CA
+certificate as the pool's `ssl.ca` in `lib/db.ts`.
+
 ### If a deploy fails
 
 Vercel runs the build, then refuses to publish an app on a Next.js release with a
